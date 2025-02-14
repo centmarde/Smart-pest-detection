@@ -1,0 +1,7 @@
+{
+  "name": "perfomance-monitoring-system",
+  "integrations": {
+    "capacitor": {}
+  },
+  "type": "custom"
+}

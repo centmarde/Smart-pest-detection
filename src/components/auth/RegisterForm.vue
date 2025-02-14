@@ -1,91 +1,145 @@
 <template>
-    <v-card class="mx-auto pa-10" max-width="600" elevation="8">
-        <v-icon
-          class="close-icon"
-          @click="emit('close-dialog')"
-          right
-        >
-          mdi-close
-        </v-icon>
-        <v-form ref="refVForm" @submit.prevent="onFormSubmit">
-    <v-row dense>
-      <v-col cols="12">
-        <v-text-field
-          v-model="formData.email"
-          label="Email"
-          prepend-inner-icon="mdi-email-outline"
-          :rules="[requiredValidator, emailValidator]"
-        ></v-text-field>
-      </v-col>
+  <v-card class="pa-6" elevation="8" rounded="lg" max-width="400">
+    <v-icon class="close-icon" @click="emit('close-dialog')" right>
+      mdi-close
+    </v-icon>
 
-      <v-col cols="12">
-        <v-text-field
-          v-model="formData.password"
-          prepend-inner-icon="mdi-lock-outline"
-          label="Password"
-          :type="isPasswordVisible ? 'text' : 'password'"
-          :append-inner-icon="isPasswordVisible ? 'mdi-eye-off' : 'mdi-eye'"
-          @click:append-inner="isPasswordVisible = !isPasswordVisible"
-          :rules="[requiredValidator, passwordValidator]"
-        ></v-text-field>
-      </v-col>
+    <v-container class="d-flex justify-center align-center logo-container">
+      <v-img
+        class="mx-auto"
+        src="@/assets/5-removebg-preview.png"
+        max-width="400px"
+        max-height="400px"
+        contain
+      ></v-img>
+    </v-container>
 
-      <v-col cols="12">
-        <v-text-field
-          v-model="formData.password_confirmation"
-          label="Password Confirmation"
-          :type="isPasswordConfirmVisible ? 'text' : 'password'"
-          :append-inner-icon="isPasswordConfirmVisible ? 'mdi-eye-off' : 'mdi-eye'"
-          @click:append-inner="isPasswordConfirmVisible = !isPasswordConfirmVisible"
-          :rules="[
-            requiredValidator,
-            confirmedValidator(formData.password_confirmation, formData.password)
-          ]"
-        ></v-text-field>
-      </v-col>
-      <v-col cols="12">
-        <v-radio-group v-model="formData.userType" :rules="[requiredValidator]" row>
-          <v-radio label="Teacher" value="teacher"></v-radio>
-          <v-radio label="Admin" value="admin"></v-radio>
-        </v-radio-group>
-      </v-col>
-    </v-row>
+    <v-form @submit.prevent="onFormSubmit">
+      <v-row class="welcome justify-center align-center">
+        <h2 class="text-font">Register</h2>
+      </v-row>
+      <v-row dense justify="center">
+        <v-col cols="12">
+          <div class="text-subtitle-1 text-mediumemphasis-">Account</div>
+          <v-text-field
+            v-model="formData.username"
+            variant="outlined"
+            density="compact"
+            label="Username"
+            prepend-inner-icon="mdi-account-outline"
+            :rules="[requiredValidator, usernameValidator]"
+            :error-messages="userNameErrorMessages"
+          ></v-text-field>
+        </v-col>
+        <v-col cols="12">
+          <div class="text-subtitle-1 text-mediumemphasis-">Email Address</div>
+          <v-text-field
+            v-model="formData.email"
+            variant="outlined"
+            density="compact"
+            label="Email"
+            prepend-inner-icon="mdi-email-outline"
+            :rules="[requiredValidator, emailValidator]"
+            :error-messages="emailErrorMessages"
+          ></v-text-field>
+        </v-col>
 
-    <v-btn
-      class="mt-2"
-      type="submit"
-       color="#00A4E5"
-      prepend-icon="mdi-account-plus"
-      :disabled="formAction.formProcess"
-      :loading="formAction.formProcess"
-      block
-    >
-      Register
-    </v-btn>
-  </v-form>
-    </v-card>
+        <v-row
+          ><v-col cols="6">
+            <div class="text-subtitle-1 text-mediumemphasis-">Password</div>
+            <v-text-field
+              v-model="formData.password"
+              variant="outlined"
+              density="compact"
+              prepend-inner-icon="mdi-lock-outline"
+              label="Password"
+              :type="isPasswordVisible ? 'text' : 'password'"
+              :append-inner-icon="isPasswordVisible ? 'mdi-eye-off' : 'mdi-eye'"
+              @click:append-inner="isPasswordVisible = !isPasswordVisible"
+              :rules="[requiredValidator, passwordValidator]"
+              :error-messages="passwordErrorMessages"
+            ></v-text-field>
+          </v-col>
+
+          <v-col cols="6">
+            <div class="text-subtitle-1 text-mediumemphasis-">
+              Repeat Password
+            </div>
+            <v-text-field
+              v-model="formData.password_confirmation"
+              label="Password Confirmation"
+              variant="outlined"
+              density="compact"
+              prepend-inner-icon="mdi-lock-check-outline"
+              :type="isPasswordConfirmVisible ? 'text' : 'password'"
+              :append-inner-icon="
+                isPasswordConfirmVisible ? 'mdi-eye-off' : 'mdi-eye'
+              "
+              @click:append-inner="
+                isPasswordConfirmVisible = !isPasswordConfirmVisible
+              "
+              :rules="[
+                requiredValidator,
+                confirmedValidator(
+                  formData.password_confirmation,
+                  formData.password
+                ),
+              ]"
+              :error-messages="passwordConfirmErrorMessages"
+            ></v-text-field> </v-col
+        ></v-row>
+
+        <v-col cols="auto">
+          <v-btn
+            height="40"
+            min-width="150"
+            type="submit"
+            color="#526E48"
+            :style="{ borderRadius: '10px' }"
+            prepend-icon="mdi-account-plus"
+            :disabled="formAction.formProcess"
+            :loading="formAction.formProcess"
+            block
+          >
+            Register
+          </v-btn>
+        </v-col>
+      </v-row>
+    </v-form>
+  </v-card>
 </template>
 
 <script lang="ts" setup>
-import { ref } from 'vue';
-import { requiredValidator, emailValidator, passwordValidator, confirmedValidator } from '../../lib/validator';
-import { useAuthUserStore } from '../../stores/authUser';
+import { ref } from "vue";
+import {
+  requiredValidator,
+  emailValidator,
+  passwordValidator,
+  confirmedValidator,
+  usernameValidator,
+} from "@/lib/validator";
+import { useAuthUserStore } from "@/stores/authUser";
 import { useToast } from "vue-toastification";
 
 // Define the emit function for the component
-const emit = defineEmits(['registration-success', 'close-dialog']);
+const emit = defineEmits(["registration-success", "close-dialog"]);
 
 const toast = useToast();
 
 const formData = ref({
-  email: '',
-  password: '',
-  password_confirmation: '',
-  userType: ''
+  email: "",
+  password: "",
+  password_confirmation: "",
+  username: "",
 });
 const formAction = ref({ formProcess: false });
 const isPasswordVisible = ref(false);
 const isPasswordConfirmVisible = ref(false);
+
+const userNameErrorMessages = ref([]);
+const emailErrorMessages = ref([]);
+const passwordErrorMessages = ref([]);
+const passwordConfirmErrorMessages = ref([]);
 
 const authUserStore = useAuthUserStore();
 
@@ -95,30 +149,30 @@ async function onFormSubmit() {
   const { error } = await authUserStore.registerUser(
     formData.value.email,
     formData.value.password,
-    formData.value.userType
+    formData.value.username
   );
 
   formAction.value.formProcess = false;
 
   if (error) {
+    //@ts-ignore
     toast.error(`Registration error: ${error.message}`, {
-        //@ts-ignore
-      position: 'top-left',
+      //@ts-ignore
+      position: "top-left",
       timeout: 3000,
       closeOnClick: true,
     });
   } else {
-    toast.success('Registration successful', {
-        //@ts-ignore
-      position: 'top-left',
+    toast.success("Registration successful", {
+      //@ts-ignore
+      position: "top-left",
       timeout: 3000,
       closeOnClick: true,
     });
- 
-    emit('close-dialog');
+    emit("registration-success");
+    emit("close-dialog");
   }
 }
-
 </script>
 
 <style scoped>
@@ -127,5 +181,28 @@ async function onFormSubmit() {
   top: 10px;
   right: 10px;
   cursor: pointer;
+}
+.welcome {
+  text-align: center;
+  margin: 0;
+  .text-font {
+    font-family: "Roboto", sans-serif !important;
+    font-weight: 900;
+    font-size: 30px;
+    color: #526e48;
+  }
+}
+
+.logo-container {
+  margin-top: 20px;
+  margin-bottom: -20px;
+  height: 120px;
+}
+
+.v-btn {
+  margin-top: 10px;
+  font-family: "Roboto", sans-serif !important;
+  font-weight: 500;
+  color: #ffffff;
 }
 </style>

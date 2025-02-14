@@ -5,5 +5,5 @@
 </template>
 
 <script lang="ts" setup>
-  //
+  import "@fontsource/montserrat"; // Defaults to weight 400
 </script>

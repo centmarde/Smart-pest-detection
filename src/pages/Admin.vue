@@ -13,7 +13,7 @@
 <script setup lang="ts">
 import { ref, onMounted, computed, defineEmits, onBeforeUnmount } from 'vue';
 
-import LayoutWrapper from '../layouts/LayoutWrapper.vue';
+import LayoutWrapper from '@/layouts/LayoutWrapper.vue';
 
 import { useToast } from 'vue-toastification';
 // import { supabase } from '../lib/supabase';

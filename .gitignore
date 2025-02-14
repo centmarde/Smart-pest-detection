@@ -20,6 +20,7 @@ pnpm-debug.log*
 *.njsproj
 *.sln
 *.sw?
+.env
 *.java
 *.gradle
 *.pro
@@ -29,3 +30,4 @@ pnpm-debug.log*
 android/gradle/wrapper/gradle-wrapper.jar
 android/gradlew
 android/gradlew.bat
+

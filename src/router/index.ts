@@ -1,76 +1,62 @@
-import { createRouter, createWebHistory } from 'vue-router/auto';
+import { createRouter, createWebHistory } from '@ionic/vue-router';
 import { setupLayouts } from 'virtual:generated-layouts';
-import { useAuthUserStore } from '../stores/authUser';
 import { useToast } from 'vue-toastification';
 
-import Hero from '@/pages/index.vue';
+import Hero from '@/pages/Index.vue';
 import Home from '@/pages/Home.vue';
 import NotFound from '@/pages/NotFound.vue';
 import Admin from '@/pages/Admin.vue';
 import Profiles from '@/pages/Profiles.vue';
+import LoginForm from '@/components/auth/LoginForm.vue';
+// @ts-ignore
+import Scan from '@/pages/Scan.vue';
+import Result from '@/pages/Result.vue';
+import ScanHistory from '@/components/views/ScanHistory.vue';
 
 const toast = useToast();
 
 const routes = setupLayouts([
   { path: '/', component: Hero },
-  { path: '/home', component: Home, name: 'Home', meta: { requiresAuth: true, role: 'teacher' } },
-  { path: '/admin', component: Admin, name: 'Admin', meta: { requiresAuth: true, role: 'admin' } },
+  { path: '/home', component: Home, name: 'Home', meta: { requiresAuth: true } },
+  { path: '/admin', component: Admin, name: 'Admin', meta: { requiresAuth: true } },
   { path: '/profiles', component: Profiles, name: 'Profiles', meta: { requiresAuth: true } },
+  { path: '/scan', component: Scan, name: 'Scan', meta: { requiresAuth: true } },
+  { path: '/result', component: Result, name: 'Result', meta: { requiresAuth: true } },
   { path: '/:pathMatch(.*)*', component: NotFound, name: 'NotFound' },
+  { path: '/:login', component: LoginForm, name: 'Login'},
+  {path: '/scan-history', component: ScanHistory, name: 'ScanHistory', meta: { requiresAuth: true }},
 ]);
 
 const router = createRouter({
-  history: createWebHistory("/"),
+  history: createWebHistory(process.env.BASE_URL),
   routes,
 });
 
-// Token check interval every 5 seconds
-let previousToken = localStorage.getItem('access_token'); // Store the previous token
-setInterval(() => {
-  const token = localStorage.getItem('access_token');
-  const currentPath = router.currentRoute.value.path; // Get current route path
+router.beforeEach((to, from, next) => {
+  const isLoggedIn = localStorage.getItem("access_token") !== null;
+  const publicPages = ["/"];
+  const protectedPages = ["/home", "/admin", "/profiles"];
 
-  if (token !== previousToken) { // Check if the token has changed
-    previousToken = token; // Update the previous token
-    if (token === null && currentPath !== '/') {
-      toast.error('Your session has expired.');
-      router.push('/');
-    } else {
-      toast.success('Session refreshed.'); // Notify user of token change
-    }
+  if (to.meta.requiresAuth && !isLoggedIn) {
+    toast.error("Authentication is required to access this page.");
+    return next("/");
   }
-}, 5000);
 
-// router.beforeEach((to, from, next) => {
-//   const isLoggedIn = localStorage.getItem("access_token") !== null;
-//   const userRole = localStorage.getItem("user_type");
-//   const publicPages = ["/"];
+  if (publicPages.includes(to.path) && isLoggedIn) {
+    return next("/home");
+  }
 
-//   if (to.meta.requiresAuth && !isLoggedIn) {
-//     toast.error("Authentication is required to access this page.");
-//     return next("/");
-//   }
-
-//   if (publicPages.includes(to.path) && isLoggedIn) {
-//     return next(userRole === 'admin' ? "/admin" : "/home");
-//   }
-
-//   if (to.meta.role && to.meta.role !== userRole) {
-//    /*  toast.error("You do not have permission to access this page."); */
-//     return next(userRole === 'admin' ? "/admin" : "/home");
-//   }
-
-//   next();
-// });
+  next();
+});
 
 router.onError((err, to) => {
-  if (err?.message?.includes?.('Failed to fetch dynamically imported module')) {
-    if (!localStorage.getItem('vuetify:dynamic-reload')) {
-      console.log('Reloading page to fix dynamic import error');
-      localStorage.setItem('vuetify:dynamic-reload', 'true');
+  if (err?.message?.includes?.("Failed to fetch dynamically imported module")) {
+    if (!localStorage.getItem("vuetify:dynamic-reload")) {
+      console.log("Reloading page to fix dynamic import error");
+      localStorage.setItem("vuetify:dynamic-reload", "true");
       location.assign(to.fullPath);
     } else {
-      console.error('Dynamic import error, reloading page did not fix it', err);
+      console.error("Dynamic import error, reloading page did not fix it", err);
     }
   } else {
     console.error(err);
@@ -78,7 +64,7 @@ router.onError((err, to) => {
 });
 
 router.isReady().then(() => {
-  localStorage.removeItem('vuetify:dynamic-reload');
+  localStorage.removeItem("vuetify:dynamic-reload");
 });
 
 export default router;
