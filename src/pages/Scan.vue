@@ -1,10 +1,6 @@
 <template>
   <LayoutWrapper>
-    <template #content>
-      <div class="container">
-        <Camera />
-      </div>
-    </template>
+    <template #content> <Camera /> </template>
   </LayoutWrapper>
 </template>
 
@@ -13,10 +9,15 @@ import Camera from "@/components/common/Camera.vue";
 import LayoutWrapper from "@/layouts/LayoutWrapper.vue";
 </script>
 
-<style scoped>
-.container {
-  display: flex;
-  flex-direction: column;
-
+<style lang="scss">
+.pest-scanner-app {
+  min-height: 100dvh;
+  overflow: auto; 
 }
+
+.v-container {
+  overflow-y: auto; 
+  max-height: calc(100vh - 64px);
+}
+
 </style>

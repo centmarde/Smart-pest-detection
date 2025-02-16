@@ -1,15 +1,10 @@
 <template>
   <v-app>
+    <InnerNavBar />
     <v-main>
-      <div id="main-content">
-        <InnerNavBar />
-        <slot name="content"></slot>
-       
-      </div>
-      <div id="bottom">
-        <BottomBar/>
-      </div>
+      <slot name="content"></slot>
     </v-main>
+    <BottomBar />
   </v-app>
 </template>
 
@@ -21,5 +16,8 @@ import BottomBar from "@/components/common/BottomBar.vue";
 <style scoped>
 .v-main {
   background-color: #8ca189 !important;
+  padding-bottom: 62px !important;
+  padding-top: 64px !important;
+  min-height: 100vh; 
 }
 </style>

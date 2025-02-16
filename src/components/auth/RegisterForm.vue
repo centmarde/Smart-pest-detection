@@ -119,7 +119,7 @@ import {
   usernameValidator,
 } from "@/lib/validator";
 import { useAuthUserStore } from "@/stores/authUser";
-import { useToast } from "vue-toastification";
+import { useToast, POSITION } from "vue-toastification";
 
 // Define the emit function for the component
 const emit = defineEmits(["registration-success", "close-dialog"]);
@@ -155,17 +155,21 @@ async function onFormSubmit() {
   formAction.value.formProcess = false;
 
   if (error) {
-    //@ts-ignore
-    toast.error(`Registration error: ${error.message}`, {
-      //@ts-ignore
-      position: "top-left",
+    const errorMessage =
+      typeof error === "string"
+        ? error
+        : "message" in error
+        ? error.message
+        : "An unknown error occurred.";
+
+    toast.error(`Registration error: ${errorMessage}`, {
+      position: POSITION.TOP_LEFT, 
       timeout: 3000,
       closeOnClick: true,
     });
   } else {
     toast.success("Registration successful", {
-      //@ts-ignore
-      position: "top-left",
+      position: POSITION.TOP_LEFT,
       timeout: 3000,
       closeOnClick: true,
     });
@@ -173,6 +177,7 @@ async function onFormSubmit() {
     emit("close-dialog");
   }
 }
+
 </script>
 
 <style scoped>

@@ -169,6 +169,7 @@ const drawer = ref(false);
 </script>
 
 <style scoped>
+
 .bg-card {
   background: rgba(161, 205, 247, 0.15);
   box-shadow: 0 4px 10px rgba(254, 79, 90, 0.3);

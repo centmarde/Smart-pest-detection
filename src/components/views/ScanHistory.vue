@@ -1,182 +1,322 @@
 <template>
-    <v-container class="history-container pa-4">
-      <div class="text-center mb-4">
-        <h1 class="text-h4 font-weight-bold text-primary mb-2">Scan History</h1>
-        <p class="text-subtitle-1 text-medium-emphasis">
-          Your Previous Plant Analyses
-        </p>
-      </div>
+  <LayoutWrapper>
+    <template #content>
+      <v-container class="pa-4">
+        <!-- Search and Filter Section -->
+        <v-card
+          class="mx-auto mb-4 search-filter-card"
+          max-width="500"
+          rounded="lg"
+        >
+          <v-card-text>
+            <v-text-field
+              v-model="searchQuery"
+              prepend-inner-icon="mdi-magnify"
+              label="Search scans..."
+              variant="outlined"
+              density="compact"
+              hide-details
+              class="mb-4"
+              @update:model-value="debounceSearch"
+            ></v-text-field>
 
-      <v-card class="mx-auto history-card" max-width="500" rounded="lg">
-        <v-list class="py-2">
-          <v-list-subheader class="text-primary font-weight-medium">
-            Recent Scans
-          </v-list-subheader>
+            <div class="d-flex gap-2">
+              <v-select
+                v-model="sortBy"
+                :items="sortOptions"
+                label="Sort by"
+                density="compact"
+                hide-details
+                variant="outlined"
+                class="flex-grow-1"
+              ></v-select>
 
-          <template v-if="scanHistory.length > 0">
-            <v-list-item
-              v-for="scan in scanHistory"
-              :key="scan.id"
-              :title="scan.diagnosis"
-              :subtitle="formatDate(scan.date)"
-              class="history-item"
-              link
-              @click="viewScanDetails(scan)"
-            >
-              <template v-slot:prepend>
-                <v-avatar size="56" rounded="lg" class="mr-3">
-                  <v-img :src="scan.imageUrl" cover></v-img>
-                </v-avatar>
-              </template>
-
-              <template v-slot:append>
-                <v-chip
-                  :color="getSeverityColor(scan.severity)"
-                  size="small"
-                  class="text-caption"
-                >
-                  {{ scan.severity }}
-                </v-chip>
-              </template>
-            </v-list-item>
-          </template>
-
-          <v-list-item v-else class="pa-4">
-            <div class="text-center w-100">
-              <v-icon size="48" color="grey" class="mb-2">mdi-leaf-off</v-icon>
-              <div class="text-body-1 text-medium-emphasis">No scans yet</div>
-              <v-btn
-                color="primary"
-                variant="text"
-                class="mt-3"
-                @click="$router.push('/')"
+              <v-menu
+                v-model="filterMenu"
+                :close-on-content-click="false"
+                location="bottom end"
               >
-                Start Scanning
-              </v-btn>
+                <template v-slot:activator="{ props }">
+                  <v-btn
+                    color="primary"
+                    size="medium"
+                    variant="outlined"
+                    v-bind="props"
+                    class="filter-btn"
+                  >
+                    <v-icon left>mdi-filter</v-icon>
+                    Filter
+                    <v-badge
+                      v-if="activeFiltersCount > 0"
+                      :content="activeFiltersCount"
+                      color="primary"
+                      class="ml-2"
+                    ></v-badge>
+                  </v-btn>
+                </template>
+
+                <v-card min-width="300" class="filter-menu">
+                  <v-card-title class="text-subtitle-1">Filters</v-card-title>
+                  <v-card-text>
+                    <v-select
+                      v-model="filters.severity"
+                      :items="severityOptions"
+                      label="Severity"
+                      density="comfortable"
+                      hide-details
+                      variant="outlined"
+                      class="mb-4"
+                    ></v-select>
+
+                    <v-select
+                      v-model="filters.timeRange"
+                      :items="timeRangeOptions"
+                      label="Time Range"
+                      density="comfortable"
+                      hide-details
+                      variant="outlined"
+                      class="mb-4"
+                    ></v-select>
+                  </v-card-text>
+                  <v-card-actions>
+                    <v-spacer></v-spacer>
+                    <v-btn variant="text" @click="resetFilters"> Reset </v-btn>
+                    <v-btn color="primary" @click="applyFilters"> Apply </v-btn>
+                  </v-card-actions>
+                </v-card>
+              </v-menu>
             </div>
-          </v-list-item>
-        </v-list>
-      </v-card>
+          </v-card-text>
+        </v-card>
 
-      <v-card
-        class="mt-4 mx-auto filter-card"
-        max-width="500"
-        variant="outlined"
-        rounded="lg"
-      >
-        <v-list>
-          <v-list-subheader>Sort & Filter</v-list-subheader>
+        <!-- History List -->
+        <v-card
+          class="mx-auto history-card"
+          max-width="500"
+          rounded="lg"
+          :loading="loading"
+        >
+          <v-list class="py-2 history-list">
+            <template v-if="filteredScans.length > 0">
+              <v-list-item
+                v-for="scan in filteredScans"
+                :key="scan.id"
+                :title="scan.diagnosis"
+                :subtitle="formatDate(scan.created_at)"
+                class="history-item"
+                link
+                @click="viewScanDetails(scan)"
+              >
+                <template v-slot:prepend>
+                  <v-avatar size="56" rounded="lg" class="mr-3">
+                    <v-img :src="scan.image_url" cover></v-img>
+                  </v-avatar>
+                </template>
 
-          <v-list-item>
-            <v-select
-              v-model="sortBy"
-              :items="sortOptions"
-              density="compact"
-              hide-details
-              variant="outlined"
-              class="mb-2"
-            ></v-select>
-          </v-list-item>
+                <template v-slot:append>
+                  <v-chip
+                    :color="getSeverityColor(scan.severity)"
+                    size="small"
+                    class="text-caption"
+                  >
+                    {{ scan.severity }}
+                  </v-chip>
+                </template>
+              </v-list-item>
 
-          <v-list-item>
-            <v-select
-              v-model="filterBySeverity"
-              :items="severityOptions"
-              density="compact"
-              hide-details
-              variant="outlined"
-            ></v-select>
-          </v-list-item>
-        </v-list>
-      </v-card>
+              <div v-if="hasMore" class="text-center pa-4">
+                <v-btn
+                  color="primary"
+                  variant="text"
+                  :loading="loadingMore"
+                  @click="loadMore"
+                >
+                  Load More
+                </v-btn>
+              </div>
+            </template>
 
-      <ScanDetailsDialog v-model="isDialogOpen" :scan="selectedScan" />
-    </v-container>
+            <v-list-item v-else-if="!loading" class="pa-4">
+              <div class="text-center w-100">
+                <v-icon size="48" color="grey" class="mb-2"
+                  >mdi-leaf-off</v-icon
+                >
+                <div class="text-body-1 text-medium-emphasis">
+                  {{ searchQuery ? "No matches found" : "No scans yet" }}
+                </div>
+                <v-btn
+                  color="primary"
+                  variant="text"
+                  class="mt-3"
+                  @click="$router.push('/')"
+                >
+                  Start Scanning
+                </v-btn>
+              </div>
+            </v-list-item>
+          </v-list>
+        </v-card>
+
+        <ScanDetailsDialog v-model="isDialogOpen" :scan="selectedScan" />
+      </v-container>
+    </template>
+  </LayoutWrapper>
 </template>
 
 <script setup lang="ts">
-import { ref } from "vue";
+import { ref, computed } from "vue";
 import ScanDetailsDialog from "./ScanDetails.vue";
 import LayoutWrapper from "@/layouts/LayoutWrapper.vue";
 
 interface ScanHistoryItem {
   id: number;
   diagnosis: string;
-  scientificName: string;
-  date: Date;
-  imageUrl: string;
+  scientific_name: string;
+  created_at: string;
+  image_url: string;
   severity: "High" | "Medium" | "Low";
   description: string;
 }
 
-interface SortOption {
-  title: string;
-  value: "date" | "severity" | "name";
-}
+// Mock Data
+const mockScans: ScanHistoryItem[] = Array.from({ length: 25 }, (_, i) => ({
+  id: i + 1,
+  diagnosis: `Scan ${i + 1}`,
+  scientific_name: `Scientific Name ${i + 1}`,
+  created_at: new Date(Date.now() - i * 86400000).toISOString(),
+  image_url: `/src/assets/default/pest${(i % 5) + 1}.jpg`,
+  severity: ["High", "Medium", "Low"][i % 3] as "High" | "Medium" | "Low",
+  description: `Description of scan ${i + 1}`,
+}));
 
-interface SeverityOption {
-  title: string;
-  value: "all" | "high" | "medium" | "low";
-}
-
-const selectedScan = ref<ScanHistoryItem | undefined>();
+// State
+const scans = ref<ScanHistoryItem[]>(mockScans);
+const loading = ref(false);
+const loadingMore = ref(false);
+const hasMore = ref(false);
+const searchQuery = ref("");
+const selectedScan = ref<ScanHistoryItem | null>(null);
 const isDialogOpen = ref(false);
+const filterMenu = ref(false);
 
-const scanHistory = ref<ScanHistoryItem[]>([
-  {
-    id: 1,
-    diagnosis: "Aphid Infestation",
-    scientificName: "Aphidoidea",
-    date: new Date("2024-02-14"),
-    imageUrl: "/src/assets/default/pest1.jpg",
-    severity: "High",
-    description:
-      "Small sap-sucking insects that can cause significant damage to plants by feeding on plant tissue. They often cluster on new growth and can transmit plant viruses.",
-  },
-  {
-    id: 2,
-    diagnosis: "Leaf Spot Disease",
-    scientificName: "Septoria lycopersici",
-    date: new Date("2024-02-13"),
-    imageUrl: "/src/assets/default/pest2.jpg",
-    severity: "Medium",
-    description:
-      "A fungal disease that causes small, circular spots with dark borders on leaves. Can lead to leaf yellowing and defoliation if left untreated.",
-  },
-  {
-    id: 3,
-    diagnosis: "Healthy Plant",
-    scientificName: "N/A",
-    date: new Date("2024-02-12"),
-    imageUrl: "/src/assets/default/pest3.jpg",
-    severity: "Low",
-    description:
-      "Plant appears healthy with no signs of pest infestation or disease.",
-  },
-]);
+// Filters and Sort (remain the same as in your code)
+const sortBy = ref("date");
+const filters = ref({
+  severity: "all",
+  timeRange: "all",
+});
 
-const sortBy = ref<SortOption["value"]>("date");
-const filterBySeverity = ref<SeverityOption["value"]>("all");
-
-const sortOptions: SortOption[] = [
+const sortOptions = [
   { title: "Date (Newest First)", value: "date" },
   { title: "Severity (High to Low)", value: "severity" },
   { title: "Name (A-Z)", value: "name" },
 ];
 
-const severityOptions: SeverityOption[] = [
+const severityOptions = [
   { title: "All Severities", value: "all" },
   { title: "High", value: "high" },
   { title: "Medium", value: "medium" },
   { title: "Low", value: "low" },
 ];
 
-const formatDate = (date: Date): string => {
+const timeRangeOptions = [
+  { title: "All Time", value: "all" },
+  { title: "Last 7 Days", value: "7days" },
+  { title: "Last 30 Days", value: "30days" },
+  { title: "Last 90 Days", value: "90days" },
+];
+
+// Computed
+const activeFiltersCount = computed(() => {
+  let count = 0;
+  if (filters.value.severity !== "all") count++;
+  if (filters.value.timeRange !== "all") count++;
+  return count;
+});
+
+const filteredScans = computed(() => {
+  let result = [...scans.value];
+
+  // Apply search filter
+  if (searchQuery.value) {
+    const query = searchQuery.value.toLowerCase();
+    result = result.filter(
+      (scan) =>
+        scan.diagnosis.toLowerCase().includes(query) ||
+        scan.scientific_name.toLowerCase().includes(query)
+    );
+  }
+
+  // Apply severity filter
+  if (filters.value.severity !== "all") {
+    result = result.filter(
+      (scan) =>
+        scan.severity.toLowerCase() === filters.value.severity.toLowerCase()
+    );
+  }
+
+  // Apply time range filter
+  if (filters.value.timeRange !== "all") {
+    const now = new Date();
+    const days = parseInt(filters.value.timeRange);
+    const pastDate = new Date(now.setDate(now.getDate() - days));
+    result = result.filter((scan) => new Date(scan.created_at) >= pastDate);
+  }
+
+  // Apply sorting
+  result.sort((a, b) => {
+    switch (sortBy.value) {
+      case "date":
+        return (
+          new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+        );
+      case "severity":
+        const severityOrder = { High: 3, Medium: 2, Low: 1 };
+        return severityOrder[b.severity] - severityOrder[a.severity];
+      case "name":
+        return a.diagnosis.localeCompare(b.diagnosis);
+      default:
+        return 0;
+    }
+  });
+
+  return result;
+});
+
+// Methods
+const debounceSearch = (value: string) => {
+  searchQuery.value = value;
+};
+
+const loadMore = async () => {
+  // Disabled in static version
+  loadingMore.value = false;
+  hasMore.value = false;
+};
+
+const resetFilters = () => {
+  filters.value = {
+    severity: "all",
+    timeRange: "all",
+  };
+  searchQuery.value = "";
+};
+
+const applyFilters = () => {
+  filterMenu.value = false;
+};
+
+const viewScanDetails = (scan: ScanHistoryItem) => {
+  selectedScan.value = scan;
+  isDialogOpen.value = true;
+};
+
+const formatDate = (dateString: string): string => {
   return new Intl.DateTimeFormat("en-US", {
     month: "short",
     day: "numeric",
     year: "numeric",
-  }).format(date);
+  }).format(new Date(dateString));
 };
 
 const getSeverityColor = (severity: ScanHistoryItem["severity"]): string => {
@@ -187,25 +327,18 @@ const getSeverityColor = (severity: ScanHistoryItem["severity"]): string => {
   };
   return colors[severity] || "grey";
 };
-
-const viewScanDetails = (scan: ScanHistoryItem): void => {
-  selectedScan.value = scan;
-  isDialogOpen.value = true;
-};
 </script>
 
 <style scoped>
-.history-container {
-  max-width: 100%;
-  min-height: 100vh;
-  background: #8ca189;
-  overflow: auto;
-}
-
-.history-card,
-.filter-card {
+.search-filter-card,
+.history-card {
   background: rgba(255, 255, 255, 0.95);
   border: 1px solid rgba(0, 0, 0, 0.1);
+}
+
+.history-list {
+  max-height: calc(100vh - 380px);
+  overflow-y: auto;
 }
 
 .history-item {
@@ -216,13 +349,25 @@ const viewScanDetails = (scan: ScanHistoryItem): void => {
   background-color: rgba(0, 0, 0, 0.03);
 }
 
+.filter-btn {
+  min-width: 100px;
+}
+
+.filter-menu {
+  border-radius: 12px;
+}
+
 @media (max-width: 600px) {
-  .history-container {
-    padding: 16px !important;
+  .v-container {
+    padding: 12px !important;
   }
 
   .text-h4 {
-    font-size: 1.75rem !important;
+    font-size: 1.5rem !important;
+  }
+
+  .history-list {
+    max-height: calc(100vh - 340px);
   }
 }
 </style>

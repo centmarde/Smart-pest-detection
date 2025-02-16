@@ -2,7 +2,7 @@ import { createRouter, createWebHistory } from '@ionic/vue-router';
 import { setupLayouts } from 'virtual:generated-layouts';
 import { useToast } from 'vue-toastification';
 
-import Hero from '@/pages/Index.vue';
+import Hero from '@/pages/index.vue';
 import Home from '@/pages/Home.vue';
 import NotFound from '@/pages/NotFound.vue';
 import Admin from '@/pages/Admin.vue';

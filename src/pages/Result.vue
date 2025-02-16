@@ -1,23 +1,233 @@
+<script setup lang="ts">
+import { ref, onMounted } from "vue";
+import LayoutWrapper from "@/layouts/LayoutWrapper.vue";
+import Loader from "@/components/common/Loader.vue";
+import { supabase } from "@/lib/supabase";
+
+interface PestScan {
+  id: number;
+  created_at: string;
+  image_path: string;
+  name: string;
+  alert_lvl: string;
+  comment: string;
+  confidence: number;
+  recommended_action: string;
+}
+
+interface ScanHistory {
+  id: number;
+  created_at: string;
+  scan_id: number;
+  user_id: number;
+  pest_scan?: PestScan;
+}
+
+const userScans = ref<PestScan | null>(null);
+const recentScans = ref<PestScan[]>([]);
+const isLoading = ref<boolean>(true);
+const imageLoading = ref<boolean>(true);
+
+const getConfidenceColor = (confidence: number): string => {
+  if (confidence >= 0.8) return "success";
+  if (confidence >= 0.6) return "warning";
+  return "error";
+};
+
+const getIssueColor = (confidence: number): string => {
+  if (confidence >= 0.8) return "error";
+  if (confidence >= 0.6) return "warning";
+  return "info";
+};
+
+const getOverallSeverityColor = (severity: string): string => {
+  const colors: Record<string, string> = {
+    High: "error",
+    Medium: "warning",
+    Low: "success",
+  };
+  return colors[severity] || "info";
+};
+
+const getOverallSeverity = (): string => {
+  const severityLevels = recentScans.value.map(scan => scan.alert_lvl);
+  if (severityLevels.includes("High")) return "High";
+  if (severityLevels.includes("Medium")) return "Medium";
+  return "Low";
+};
+
+const getAIAnalysis = (): string => {
+  const issues = recentScans.value.map((r) => r.name.toLowerCase());
+
+  if (issues.includes("healthy")) {
+    return "Your plant appears to be healthy! Continue with regular care and maintenance to keep it thriving.";
+  }
+
+  if (issues.includes("aphids")) {
+    return "I've detected signs of aphid infestation. These small insects feed on plant sap and can quickly multiply, potentially causing significant damage to your plant's health and growth.";
+  }
+
+  if (issues.includes("leaf-spot")) {
+    return "Analysis shows evidence of leaf spot disease. This fungal infection can spread to other leaves and plants if not treated promptly. The affected areas may expand and eventually cause leaf drop.";
+  }
+
+  return "I've identified potential issues with your plant. Please review the detailed findings below for specific concerns and recommended actions.";
+};
+
+const getCurrentDate = (): string => {
+  return new Date().toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+};
+
+const getIssueIcon = (name: string): string => {
+  const icons: Record<string, string> = {
+    "Rice Bug": "mdi-bug",
+    "Brown Planthopper": "mdi-leaf-off",
+    "Green Leaf Hopper": "mdi-leaf",
+    "Rice Black Bug": "mdi-bug",
+    "White Yellow Stemborer": "mdi-butterfly",
+    default: "mdi-alert-circle",
+  };
+  return icons[name] || icons.default;
+};
+
+const formatClassName = (className: string): string => {
+  return className
+    .split("-")
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(" ");
+};
+
+const getIssueDescription = (className: string): string => {
+  const descriptions: Record<string, string> = {
+    aphids:
+      "Small sap-sucking insects that can cause significant damage to plants.",
+    "leaf-spot":
+      "Fungal disease causing spots on leaves that can lead to defoliation.",
+    healthy: "No significant issues detected in the plant.",
+    default: "Potential plant health issue detected.",
+  };
+  return descriptions[className.toLowerCase()] || descriptions.default;
+};
+
+const fetchUserScans = async (): Promise<PestScan | null> => {
+  const userId = localStorage.getItem("user_id");
+  console.log('User ID:', userId);
+  if (!userId) return null;
+
+  // Get user's ID from users table first
+  const { data: userData, error: userError } = await supabase
+    .from('users')
+    .select('id')
+    .eq('id', userId)
+    .single();
+
+  if (userError || !userData) {
+    console.error('Error fetching user:', userError);
+    return null;
+  }
+
+  // Fetch latest scan from scan_history with joined pest_scans data
+  const { data: scanData, error: scanError } = await supabase
+    .from('scan_history')
+    .select(`
+      *,
+      pest_scan:pest_scans (*)
+    `)
+    .eq('user_id', userData.id)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .single();
+
+  if (scanError) {
+    console.error('Error fetching scan history:', scanError);
+    return null;
+  }
+
+  if (scanData && scanData.pest_scan) {
+    console.log('Latest Scan Data:', scanData);
+    return scanData.pest_scan;
+  }
+
+  return null;
+};
+
+const fetchRecentScans = async (): Promise<PestScan[]> => {
+  const userId = localStorage.getItem("user_id");
+  if (!userId) return [];
+
+  // Get user's ID from users table first
+  const { data: userData, error: userError } = await supabase
+    .from('users')
+    .select('id')
+    .eq('id', userId)
+    .single();
+
+  if (userError || !userData) {
+    console.error('Error fetching user:', userError);
+    return [];
+  }
+
+  // Fetch recent scans with joined pest_scans data
+  const { data: scanData, error: scanError } = await supabase
+    .from('scan_history')
+    .select(`
+      *,
+      pest_scan:pest_scans (*)
+    `)
+    .eq('user_id', userData.id)
+    .order('created_at', { ascending: false })
+    .limit(1);
+
+  if (scanError) {
+    console.error('Error fetching recent scans:', scanError);
+    return [];
+  }
+
+  // Extract pest_scan data from each scan history record
+  const pestScans = scanData
+    ?.map(scan => scan.pest_scan)
+    .filter((scan): scan is PestScan => scan !== null) || [];
+
+  console.log('Recent Pest Scans:', pestScans);
+  return pestScans;
+};
+
+const onImageLoaded = (): void => {
+  imageLoading.value = false;
+};
+
+onMounted(async () => {
+  const data = await fetchUserScans();
+  userScans.value = data;
+  isLoading.value = false;
+
+  const recentScansData = await fetchRecentScans();
+  recentScans.value = recentScansData;
+  console.log('Recent Scans:', recentScansData);
+});
+</script>
+
 <template>
   <LayoutWrapper>
     <template #content>
-      <v-container class="result-container pa-4">
+      <v-container class="pa-4 mb-10">
         <div v-if="isLoading" class="loading-state">
           <Loader />
           <div class="text-h6 mt-1 text-primary">Analyzing your plant...</div>
-          <div class="text-body-2 text-medium-emphasis mt-2">
+          <div class="text-body-2 text-medium-emphasis mt-1">
             Using AI to detect issues
           </div>
         </div>
 
         <div v-else class="result-content">
-          <div class="text-center mb-6">
-            <h1 class="text-h4 font-weight-bold text-primary mb-2">
-              Analysis Results
-            </h1>
-            <p class="text-subtitle-1 text-medium-emphasis">
+          <div class="text-center mb-1">
+            <div class="text-subtitle-1 text-medium-emphasis">
               Here's what our system detected in your plant
-            </p>
+            </div>
           </div>
 
           <v-card
@@ -44,7 +254,6 @@
                 </div>
               </template>
 
-              <!-- Overlay for loading state -->
               <div v-if="imageLoading" class="image-overlay">
                 <v-progress-circular
                   indeterminate
@@ -54,7 +263,8 @@
               </div>
             </v-img>
 
-            <div v-if="!imageLoading && scanResultStore.scanResult.length">
+            <div v-if="!imageLoading && recentScans.length">
+              <!-- AI Insights Section -->
               <v-card-text class="pa-4">
                 <div class="d-flex align-center justify-space-between mb-4">
                   <div class="text-h6 font-weight-medium">
@@ -62,9 +272,9 @@
                     Detection Results
                   </div>
                   <v-chip color="primary" size="small" variant="elevated">
-                    {{ scanResultStore.scanResult.length }}
+                    {{ recentScans.length }}
                     {{
-                      scanResultStore.scanResult.length === 1
+                      recentScans.length === 1
                         ? "Issue"
                         : "Issues"
                     }}
@@ -74,7 +284,7 @@
 
                 <div class="results-list">
                   <v-card
-                    v-for="(result, index) in scanResultStore.scanResult"
+                    v-for="(result, index) in recentScans"
                     :key="index"
                     variant="outlined"
                     class="mb-3 result-item"
@@ -91,10 +301,10 @@
                             size="24"
                             class="mr-2"
                           >
-                            {{ getIssueIcon(result.class) }}
+                            {{ getIssueIcon(result.name) }}
                           </v-icon>
                           <span class="text-h6">{{
-                            formatClassName(result.class)
+                            formatClassName(result.name)
                           }}</span>
                         </div>
                         <v-chip
@@ -118,59 +328,91 @@
                       ></v-progress-linear>
 
                       <div class="text-body-2 text-medium-emphasis mt-3">
-                        {{ getIssueDescription(result.class) }}
+                        {{ getIssueDescription(result.name) }}
                       </div>
                     </v-card-text>
                   </v-card>
                 </div>
+                <v-card
+                  class="mb-4 ai-insights-card"
+                  rounded="lg"
+                  elevation="1"
+                >
+                  <v-card-text>
+                    <div class="d-flex align-center mb-2">
+                      <v-icon color="primary" size="24" class="mr-2"
+                        >mdi-brain</v-icon
+                      >
+                      <span class="text-h6">Deep Think</span>
+                    </div>
+
+                    <div class="d-flex align-center justify-space-between mb-3">
+                      <v-chip
+                        :color="getOverallSeverityColor(getOverallSeverity())"
+                        size="small"
+                        class="mr-2"
+                      >
+                        {{ getOverallSeverity() }} Severity
+                      </v-chip>
+                      <v-chip color="primary" size="small">
+                        {{ getCurrentDate() }}
+                      </v-chip>
+                    </div>
+
+                    <div class="text-body-1 mb-3">
+                      {{ getAIAnalysis() }}
+                    </div>
+
+                    <v-alert
+                      v-if="getOverallSeverity() !== 'Low'"
+                      :color="getOverallSeverityColor(getOverallSeverity())"
+                      variant="tonal"
+                      density="comfortable"
+                    >
+                     
+                    </v-alert>
+                    <div class="text-body-2 pa-2" style="background-color:#E3F0E4;" v-html="userScans?.recommended_action"></div>
+                  </v-card-text>
+                </v-card>
+                <v-card
+                  class="mb-4 ai-insights-card"
+                  rounded="lg"
+                  elevation="1"
+                >
+                 
+                  <v-card-text>
+                    <div class="d-flex align-center mb-2">
+                      <v-icon color="primary" size="24" class="mr-2">mdi-robot</v-icon>
+                      <span class="text-h6">AI Detailed Analysis</span>
+                    </div>
+                    <div class="text-body-1 mb-3" v-html="userScans?.comment"></div>
+                  </v-card-text>
+                </v-card>
               </v-card-text>
 
-              <v-card-actions class="pa-4 pt-0">
-                <v-row>
-                  <v-col cols="12">
-                    <v-btn
-                      block
-                      color="white"
-                      size="large"
-                      rounded="lg"
-                      @click="$router.push('/scan')"
-                      elevation="2"
-                      class="scan-button"
-                    >
-                      <v-icon start>mdi-camera</v-icon>
-                      Scan Another Plant
-                    </v-btn>
-                  </v-col>
+              <v-card-actions class="pa-2 d-flex flex-column">
+                <v-btn
+                  block
+                  color="white"
+                  size="large"
+                  rounded="lg"
+                  @click="$router.push('/scan')"
+                  elevation="3"
+                  class="scan-button text-none"
+                >
+                  <v-icon start>mdi-camera</v-icon>
+                  Scan Another Plant
+                </v-btn>
 
-                  <v-col cols="12">
-                    <v-btn
-                      block
-                      color="success"
-                      variant="outlined"
-                      size="large"
-                      rounded="lg"
-                      @click="viewTreatments"
-                      class="text-none"
-                    >
-                      <v-icon start>mdi-medical-bag</v-icon>
-                      View Treatment Options
-                    </v-btn>
-                  </v-col>
-
-                  <v-col cols="12">
-                    <v-btn
-                      block
-                      variant="text"
-                      size="large"
-                      rounded="lg"
-                      @click="$router.push('/scan-history')"
-                      class="text-none"
-                    >
-                      <v-icon start>mdi-history</v-icon>
-                      View Scan History
-                    </v-btn>
-                  </v-col>
-                </v-row>
+                <v-btn
+                  block
+                  color="black"
+                  variant="text"
+                  @click="$router.push('/scan-history')"
+                >
+                  <v-icon start>mdi-history</v-icon>
+                  View Scan History
+                </v-btn>
               </v-card-actions>
             </div>
           </v-card>
@@ -180,110 +422,19 @@
   </LayoutWrapper>
 </template>
 
-<script setup lang="ts">
-import { ref, onMounted } from "vue";
-import { useRouter } from "vue-router";
-import { useScanResultStore } from "@/stores/scanResultStore";
-import LayoutWrapper from "@/layouts/LayoutWrapper.vue";
-import Loader from "@/components/common/Loader.vue";
-import { supabase } from "@/lib/supabase";
-
-interface ScanResult {
-  class: string;
-  confidence: number;
-}
-
-interface UserScan {
-  image_path: string;
-  created_at?: string;
-}
-
-const router = useRouter();
-const scanResultStore = useScanResultStore();
-const userScans = ref<UserScan | null>(null);
-const isLoading = ref<boolean>(true);
-const imageLoading = ref<boolean>(true);
-
-const getConfidenceColor = (confidence: number): string => {
-  if (confidence >= 0.8) return "success";
-  if (confidence >= 0.6) return "warning";
-  return "error";
-};
-
-const getIssueColor = (confidence: number): string => {
-  if (confidence >= 0.8) return "error";
-  if (confidence >= 0.6) return "warning";
-  return "info";
-};
-
-const getIssueIcon = (className: string): string => {
-  const icons: Record<string, string> = {
-    aphids: "mdi-bug",
-    "leaf-spot": "mdi-leaf-off",
-    healthy: "mdi-leaf",
-    default: "mdi-alert-circle",
-  };
-  return icons[className.toLowerCase()] || icons.default;
-};
-
-const formatClassName = (className: string): string => {
-  return className
-    .split("-")
-    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
-    .join(" ");
-};
-
-const getIssueDescription = (className: string): string => {
-  const descriptions: Record<string, string> = {
-    aphids:
-      "Small sap-sucking insects that can cause significant damage to plants.",
-    "leaf-spot":
-      "Fungal disease causing spots on leaves that can lead to defoliation.",
-    healthy: "No significant issues detected in the plant.",
-    default: "Potential plant health issue detected.",
-  };
-  return descriptions[className.toLowerCase()] || descriptions.default;
-};
-
-const fetchUserScans = async (): Promise<{ data?: UserScan; error?: any }> => {
-  const userId = localStorage.getItem("user_id");
-  if (!userId) return { error: "User not logged in" };
-
-  const { data, error } = await supabase
-    .from("pest_scans")
-    .select("image_path, created_at")
-    .eq("user_id", userId)
-    .order("created_at", { ascending: false })
-    .limit(1)
-    .single();
-
-  return error ? { error } : { data };
-};
-
-const onImageLoaded = (): void => {
-  imageLoading.value = false;
-};
-
-const viewTreatments = (): void => {
-  router.push("/treatments");
-};
-
-onMounted(async () => {
-  const { data, error } = await fetchUserScans();
-  if (!error) userScans.value = data;
-  isLoading.value = false;
-});
-</script>
-
 <style scoped>
-.result-container {
-  height: 92vh;
+.pest-scanner-app {
   background: #8ca189;
+  min-height: 100dvh;
+  overflow: auto;
+}
+
+.v-container {
   overflow-y: auto;
+  max-height: calc(100vh - 64px);
 }
 
 .loading-state {
-  height: 100vh;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -296,6 +447,11 @@ onMounted(async () => {
   border-radius: 20px;
   overflow: hidden;
   background: rgba(255, 255, 255, 0.95);
+}
+
+.ai-insights-card {
+  background: rgba(250, 250, 250, 0.95);
+  border: 1px solid rgba(0, 0, 0, 0.1);
 }
 
 .result-image {
@@ -356,5 +512,9 @@ onMounted(async () => {
   .result-card {
     margin: 0 !important;
   }
+}
+
+.ai-insights-card :deep(br) {
+  margin-bottom: 0.5em;
 }
 </style>
