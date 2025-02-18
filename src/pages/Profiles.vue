@@ -25,6 +25,7 @@
           <!-- Profile Header -->
           <v-sheet class="profile-header" rounded="lg">
             <v-container class="py-2">
+
               <v-row align="center" no-gutters>
                 <v-col
                   cols="12"
@@ -56,29 +57,14 @@
                   sm="8"
                   md="9"
                   class="text-center text-sm-start ps-sm-2"
+
                 >
-                  <div>
-                    <h2 class="text-h4 font-weight-bold text-white mb-1">
-                      {{ username }}
-                    </h2>
-                    <p class="text-caption text-white mb-2">
-                      {{ email }}
-                    </p>
-                    <v-btn
-                      prepend-icon="mdi-account-edit"
-                      variant="tonal"
-                      color="white"
-                      class="edit-profile-btn"
-                      @click="dialog = true"
-                      size="x-small"
-                    >
-                      Edit Profile
-                    </v-btn>
-                  </div>
-                </v-col>
-              </v-row>
+                  Edit Profile
+                </v-btn>
+              </div>
             </v-container>
           </v-sheet>
+
           <!-- Stats Cards -->
           <v-container class="py-4">
             <v-row dense>
@@ -202,8 +188,6 @@
                   variant="outlined"
                   @change="uploadProfileImage"
                   density="comfortable"
-                  :error-messages="errorMessage"
-                  :loading="loading"
                 ></v-file-input>
               </v-form>
               <!-- Error Message -->
@@ -238,7 +222,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, watch } from "vue";
+import { ref, onMounted } from "vue";
 import { useUserData, supabase } from "@/stores/authUser";
 import LayoutWrapper from "@/layouts/LayoutWrapper.vue";
 
@@ -304,6 +288,122 @@ const formatDate = (date: string) => {
   return new Date(date).toLocaleDateString();
 };
 
+const uploadProfileImage = async (file: File | null, userId: string | null) => {
+  if (!file) {
+    console.error("No file selected.");
+    errorMessage.value = "No file selected.";
+    return;
+  }
+
+  if (!userId) {
+    console.error("User ID is missing.");
+    errorMessage.value = "User ID is missing.";
+    return;
+  }
+
+  try {
+    // Ensure the file has an extension
+    const fileExt = file.name.split('.').pop() || 'jpg';
+    const fileName = `${Date.now()}.${fileExt}`;
+    const filePath = `avatars/${fileName}`;
+
+    // Upload the file to Supabase Storage
+    const { data: uploadData, error: uploadError } = await supabase.storage
+      .from('profiles')
+      .upload(filePath, file);
+
+    if (uploadError) {
+      throw new Error(`Upload error: ${uploadError.message}`);
+    }
+
+    // Construct the public URL manually if needed
+    const { data: urlData, error: urlError } = supabase.storage
+      .from('profiles')
+      .getPublicUrl(filePath);
+
+    if (urlError || !urlData.publicUrl) {
+      throw new Error("Failed to get public URL for the uploaded image.");
+    }
+
+    // Update the user's profile image in the database
+    const { error: updateError } = await supabase
+      .from('users')
+      .update({ profile_image: urlData.publicUrl })
+      .eq('user_id', userId);
+
+    if (updateError) {
+      throw new Error(`Update error: ${updateError.message}`);
+    }
+
+    // Update the local profile image reference
+    profileImage.value = urlData.publicUrl;
+    console.log("Profile image updated successfully:", urlData.publicUrl);
+  } catch (error) {
+    console.error("Error uploading image:", error);
+    errorMessage.value = error instanceof Error ? error.message : "An unknown error occurred.";
+  }
+};
+
+// Typed save profile function
+const saveProfile = async (): Promise<void> => {
+  if (!user.value?.id) return;
+
+  saving.value = true;
+  errorMessage.value = '';
+
+  try {
+    if (newPassword.value) {
+      if (!currentPassword.value) {
+        throw new Error('Current password is required to change password.');
+      }
+
+      const { error: authError } = await supabase.auth.signInWithPassword({
+        email: user.value.email!,
+        password: currentPassword.value,
+      });
+
+      if (authError) throw authError;
+
+      const { error: updateError } = await supabase.auth.updateUser({
+        password: newPassword.value,
+      });
+
+      if (updateError) throw updateError;
+    }
+
+    const { error: profileError } = await supabase
+      .from('users')
+      .update({
+        username: username.value,
+        profile_image: profileImage.value,
+      })
+      .eq('user_id', user.value.id);
+
+    if (profileError) throw profileError;
+
+    dialog.value = false;
+    currentPassword.value = '';
+    newPassword.value = '';
+    await refresh();
+  } catch (error: unknown) {
+    console.error('Error saving profile:', error);
+    if (error instanceof Error) {
+      errorMessage.value = error.message;
+    } else if (typeof error === 'string') {
+      errorMessage.value = error;
+    } else {
+      errorMessage.value = 'An unknown error occurred';
+    }
+  } finally {
+    saving.value = false;
+  }
+};
+
+// Lifecycle
+onMounted(async () => {
+  await fetchUserInfo();
+});
+
 const fetchUserInfo = async () => {
   try {
     const {
@@ -337,134 +437,6 @@ const fetchUserProfile = async (userId: string) => {
     profileImage.value = data.profile_image || profileImage.value;
   }
 };
-
-const uploadProfileImage = async (event: Event) => {
-  const fileInput = event.target as HTMLInputElement;
-  const file = fileInput.files?.[0];
-
-  if (!file) {
-    errorMessage.value = "No file selected.";
-    return;
-  }
-
-  if (!user.value?.id) {
-    errorMessage.value = "Please log in to upload a profile image.";
-    return;
-  }
-
-  try {
-    // Validate file type and size
-    if (!file.type.startsWith("image/")) {
-      throw new Error("Please upload an image file.");
-    }
-
-    if (file.size > 5 * 1024 * 1024) {
-      // 5MB limit
-      throw new Error("Image size should be less than 5MB.");
-    }
-
-    // Create unique file name
-    const fileExt = file.name.split(".").pop();
-    const fileName = `${user.value.id}-${Date.now()}.${fileExt}`;
-    const filePath = `avatars/${fileName}`;
-
-    // Upload file to Supabase Storage
-    const { error: uploadError } = await supabase.storage
-      .from("profiles")
-      .upload(filePath, file, {
-        cacheControl: "3600",
-        upsert: true,
-      });
-
-    if (uploadError) throw uploadError;
-
-    // Get public URL
-    const { data: urlData } = await supabase.storage
-      .from("profiles")
-      .getPublicUrl(filePath);
-
-    if (!urlData.publicUrl) {
-      throw new Error("Failed to get public URL for the uploaded image.");
-    }
-
-    // Update user profile in database
-    const { error: updateError } = await supabase
-      .from("users")
-      .update({ profile_image: urlData.publicUrl })
-      .eq("user_id", user.value.id);
-
-    if (updateError) throw updateError;
-
-    // Update local state
-    profileImage.value = urlData.publicUrl;
-
-    // Show success message (if using vue-toastification)
-  } catch (error) {
-    console.error("Error uploading image:", error);
-    errorMessage.value =
-      error instanceof Error ? error.message : "An unknown error occurred.";
-  }
-};
-
-// Typed save profile function
-const saveProfile = async (): Promise<void> => {
-  if (!user.value?.id) return;
-
-  saving.value = true;
-  errorMessage.value = "";
-
-  try {
-    if (newPassword.value) {
-      if (!currentPassword.value) {
-        throw new Error("Current password is required to change password.");
-      }
-
-      const { error: authError } = await supabase.auth.signInWithPassword({
-        email: user.value.email!,
-        password: currentPassword.value,
-      });
-
-      if (authError) throw authError;
-
-      const { error: updateError } = await supabase.auth.updateUser({
-        password: newPassword.value,
-      });
-
-      if (updateError) throw updateError;
-    }
-
-    const { error: profileError } = await supabase
-      .from("users")
-      .update({
-        username: username.value,
-        profile_image: profileImage.value,
-      })
-      .eq("user_id", user.value.id);
-
-    if (profileError) throw profileError;
-
-    dialog.value = false;
-    currentPassword.value = "";
-    newPassword.value = "";
-    await refresh();
-  } catch (error: unknown) {
-    console.error("Error saving profile:", error);
-    if (error instanceof Error) {
-      errorMessage.value = error.message;
-    } else if (typeof error === "string") {
-      errorMessage.value = error;
-    } else {
-      errorMessage.value = "An unknown error occurred";
-    }
-  } finally {
-    saving.value = false;
-  }
-};
-
-// Lifecycle
-onMounted(async () => {
-  await fetchUserInfo();
-});
 </script>
 
 <style scoped>
@@ -488,7 +460,7 @@ onMounted(async () => {
 
 .avatar-wrapper {
   position: relative;
-  margin-bottom: 0;
+  display: inline-block;
 }
 
 .profile-avatar {
