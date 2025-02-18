@@ -89,7 +89,7 @@
           </v-card-text>
         </v-card>
 
-        <!-- History List -->
+        <!-- History Lists -->
         <v-card
           class="mx-auto history-card"
           max-width="500"
@@ -101,25 +101,25 @@
               <v-list-item
                 v-for="scan in filteredScans"
                 :key="scan.id"
-                :title="scan.diagnosis"
-                :subtitle="formatDate(scan.created_at)"
+                :title="scan.pest_scan.name"
+                :subtitle="`${formatDate(scan.created_at)} - by ${scan.user?.username || 'Unknown User'}`"
                 class="history-item"
                 link
                 @click="viewScanDetails(scan)"
               >
                 <template v-slot:prepend>
                   <v-avatar size="56" rounded="lg" class="mr-3">
-                    <v-img :src="scan.image_url" cover></v-img>
+                    <v-img :src="scan.pest_scan.image_path" cover></v-img>
                   </v-avatar>
                 </template>
 
                 <template v-slot:append>
                   <v-chip
-                    :color="getSeverityColor(scan.severity)"
+                    :color="getSeverityColor(scan.pest_scan.alert_lvl)"
                     size="small"
                     class="text-caption"
                   >
-                    {{ scan.severity }}
+                    {{ scan.pest_scan.alert_lvl }}
                   </v-chip>
                 </template>
               </v-list-item>
@@ -155,6 +155,18 @@
               </div>
             </v-list-item>
           </v-list>
+
+          <!-- Add Pagination -->
+          <v-card-actions class="d-flex justify-center pa-4">
+            <v-pagination
+              v-if="totalPages > 1"
+              v-model="currentPage"
+              :length="totalPages"
+              :total-visible="5"
+              rounded="circle"
+              @update:model-value="handlePageChange"
+            ></v-pagination>
+          </v-card-actions>
         </v-card>
 
         <ScanDetailsDialog v-model="isDialogOpen" :scan="selectedScan" />
@@ -164,40 +176,56 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from "vue";
+import { ref, computed, onMounted, onUnmounted } from "vue";
 import ScanDetailsDialog from "./ScanDetails.vue";
 import LayoutWrapper from "@/layouts/LayoutWrapper.vue";
+import { supabase } from "@/lib/supabase";
+
+interface PestScan {
+  id: number;
+  created_at: string;
+  image_path: string;
+  name: string;
+  alert_lvl: string;
+  comment: string;
+  confidence: number;
+  recommended_action: string;
+}
+
+interface User {
+  id: number;
+  username: string;
+}
 
 interface ScanHistoryItem {
   id: number;
-  diagnosis: string;
-  scientific_name: string;
   created_at: string;
-  image_url: string;
-  severity: "High" | "Medium" | "Low";
-  description: string;
+  scan_id: number;
+  user_id: number;
+  pest_scan: PestScan;
+  user: User;
 }
 
-// Mock Data
-const mockScans: ScanHistoryItem[] = Array.from({ length: 25 }, (_, i) => ({
-  id: i + 1,
-  diagnosis: `Scan ${i + 1}`,
-  scientific_name: `Scientific Name ${i + 1}`,
-  created_at: new Date(Date.now() - i * 86400000).toISOString(),
-  image_url: `/src/assets/default/pest${(i % 5) + 1}.jpg`,
-  severity: ["High", "Medium", "Low"][i % 3] as "High" | "Medium" | "Low",
-  description: `Description of scan ${i + 1}`,
-}));
-
 // State
-const scans = ref<ScanHistoryItem[]>(mockScans);
-const loading = ref(false);
+const scans = ref<ScanHistoryItem[]>([]);
+const loading = ref(true);
 const loadingMore = ref(false);
 const hasMore = ref(false);
 const searchQuery = ref("");
-const selectedScan = ref<ScanHistoryItem | null>(null);
+const selectedScan = ref<ScanHistoryItem | undefined>(undefined);
 const isDialogOpen = ref(false);
 const filterMenu = ref(false);
+const currentPage = ref(1);
+const totalPages = ref(1);
+
+// Replace the static itemsPerPage with a computed property
+const itemsPerPage = computed(() => {
+  const height = window.innerHeight;
+  if (height <= 667) return 4;
+  if (height <= 740) return 5;
+  if (height <= 915) return 7;
+  return 7; // default for larger screens
+});
 
 // Filters and Sort (remain the same as in your code)
 const sortBy = ref("date");
@@ -226,6 +254,53 @@ const timeRangeOptions = [
   { title: "Last 90 Days", value: "90days" },
 ];
 
+const fetchScanHistory = async () => {
+  loading.value = true;
+
+  try {
+    // Get total count of all scans
+    const { count } = await supabase
+      .from('scan_history')
+      .select('*', { count: 'exact', head: true });
+
+    totalPages.value = Math.ceil((count || 0) / itemsPerPage.value); // Update to use .value
+
+    // Fetch paginated data with both pest_scans and users data
+    const { data, error } = await supabase
+      .from('scan_history')
+      .select(`
+        *,
+        pest_scan:pest_scans (*),
+        user:users (username)
+      `)
+      .order('created_at', { ascending: false })
+      .range(
+        (currentPage.value - 1) * itemsPerPage.value, // Update to use .value
+        currentPage.value * itemsPerPage.value - 1    // Update to use .value
+      );
+
+    if (error) {
+      console.error('Error fetching scan history:', error);
+      return;
+    }
+
+    scans.value = data || [];
+  } catch (error) {
+    console.error('Error:', error);
+  } finally {
+    loading.value = false;
+  }
+};
+
+const loadMore = async () => {
+  if (loadingMore.value || !hasMore.value) return;
+  
+  loadingMore.value = true;
+  currentPage.value++;
+  await fetchScanHistory();
+  loadingMore.value = false;
+};
+
 // Computed
 const activeFiltersCount = computed(() => {
   let count = 0;
@@ -234,6 +309,7 @@ const activeFiltersCount = computed(() => {
   return count;
 });
 
+// Modified computed property to work with new data structure
 const filteredScans = computed(() => {
   let result = [...scans.value];
 
@@ -242,8 +318,7 @@ const filteredScans = computed(() => {
     const query = searchQuery.value.toLowerCase();
     result = result.filter(
       (scan) =>
-        scan.diagnosis.toLowerCase().includes(query) ||
-        scan.scientific_name.toLowerCase().includes(query)
+        scan.pest_scan.name.toLowerCase().includes(query)
     );
   }
 
@@ -251,7 +326,7 @@ const filteredScans = computed(() => {
   if (filters.value.severity !== "all") {
     result = result.filter(
       (scan) =>
-        scan.severity.toLowerCase() === filters.value.severity.toLowerCase()
+        scan.pest_scan.alert_lvl.toLowerCase() === filters.value.severity.toLowerCase()
     );
   }
 
@@ -267,14 +342,11 @@ const filteredScans = computed(() => {
   result.sort((a, b) => {
     switch (sortBy.value) {
       case "date":
-        return (
-          new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-        );
+        return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
       case "severity":
-        const severityOrder = { High: 3, Medium: 2, Low: 1 };
-        return severityOrder[b.severity] - severityOrder[a.severity];
+        return b.pest_scan.alert_lvl.localeCompare(a.pest_scan.alert_lvl);
       case "name":
-        return a.diagnosis.localeCompare(b.diagnosis);
+        return a.pest_scan.name.localeCompare(b.pest_scan.name);
       default:
         return 0;
     }
@@ -283,15 +355,19 @@ const filteredScans = computed(() => {
   return result;
 });
 
+onMounted(() => {
+  fetchScanHistory();
+  window.addEventListener('resize', handleResize);
+});
+
+// Clean up the event listener
+onUnmounted(() => {
+  window.removeEventListener('resize', handleResize);
+});
+
 // Methods
 const debounceSearch = (value: string) => {
   searchQuery.value = value;
-};
-
-const loadMore = async () => {
-  // Disabled in static version
-  loadingMore.value = false;
-  hasMore.value = false;
 };
 
 const resetFilters = () => {
@@ -319,13 +395,24 @@ const formatDate = (dateString: string): string => {
   }).format(new Date(dateString));
 };
 
-const getSeverityColor = (severity: ScanHistoryItem["severity"]): string => {
-  const colors: Record<ScanHistoryItem["severity"], string> = {
+const getSeverityColor = (severity: PestScan["alert_lvl"]): string => {
+  const colors: Record<PestScan["alert_lvl"], string> = {
     High: "error",
     Medium: "warning",
     Low: "success",
   };
   return colors[severity] || "grey";
+};
+
+const handlePageChange = (page: number) => {
+  currentPage.value = page;
+  fetchScanHistory();
+};
+
+// Add window resize handling
+const handleResize = () => {
+  // Trigger a re-fetch when the itemsPerPage changes due to window resize
+  fetchScanHistory();
 };
 </script>
 
@@ -369,5 +456,10 @@ const getSeverityColor = (severity: ScanHistoryItem["severity"]): string => {
   .history-list {
     max-height: calc(100vh - 340px);
   }
+}
+
+.v-pagination {
+  justify-content: center;
+  width: 100%;
 }
 </style>

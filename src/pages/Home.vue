@@ -119,7 +119,11 @@
                 </span>
               </v-card-title>
               <v-card-text>
-                <v-chart class="chart" :option="chartOption" autoresize />
+                <v-chart 
+                  class="chart" 
+                  :option="chartOption" 
+                  :autoresize="true"
+                />
               </v-card-text>
             </v-card>
           </v-col>
@@ -131,9 +135,9 @@
 
 <script setup lang="ts">
 import { ref, computed } from "vue";
-import { use } from "echarts/core";
-import { CanvasRenderer } from "echarts/renderers";
-import { BarChart } from "echarts/charts";
+import * as echarts from 'echarts/core';
+import { CanvasRenderer } from 'echarts/renderers';
+import { BarChart } from 'echarts/charts';
 import { useScanResultStore } from "@/stores/scanResultStore";
 import { SupabaseClient } from "@supabase/supabase-js";
 import {
@@ -141,8 +145,9 @@ import {
   TooltipComponent,
   LegendComponent,
   TitleComponent,
-} from "echarts/components";
-import VChart from "vue-echarts";
+  DatasetComponent
+} from 'echarts/components';
+import VChart from 'vue-echarts';
 import {
   mdiClockOutline,
   mdiCalendarMonth,
@@ -151,14 +156,18 @@ import {
   mdiPercent,
 } from "@mdi/js";
 import LayoutWrapper from "@/layouts/LayoutWrapper.vue";
-use([
+
+// Register necessary ECharts components
+echarts.use([
   CanvasRenderer,
   BarChart,
   GridComponent,
   TooltipComponent,
   LegendComponent,
   TitleComponent,
+  DatasetComponent
 ]);
+
 import { supabase } from "@/stores/authUser";
 
 const fetchUserInfo = async () => {
@@ -288,22 +297,63 @@ const chartData = ref<Record<Timeframe, ChartData>>({
 });
 
 const chartOption = computed(() => ({
-  tooltip: { trigger: "axis", axisPointer: { type: "shadow" } },
-  grid: { left: "3%", right: "4%", bottom: "3%", containLabel: true },
-  xAxis: {
-    type: "category",
-    data: chartData.value[selectedTimeframe.value].labels,
-    axisTick: { alignWithLabel: true },
+  tooltip: {
+    trigger: 'axis',
+    axisPointer: {
+      type: 'shadow'
+    }
   },
-  yAxis: { type: "value" },
-  series: [
-    {
-      name: "Scans",
-      type: "bar",
-      barWidth: "60%",
-      data: chartData.value[selectedTimeframe.value].data,
+  grid: {
+    left: '3%',
+    right: '4%',
+    bottom: '3%',
+    containLabel: true
+  },
+  xAxis: [{
+    type: 'category',
+    data: chartData.value[selectedTimeframe.value].labels,
+    axisTick: {
+      alignWithLabel: true
     },
-  ],
+    axisLabel: {
+      color: '#ffffff',
+      rotate: selectedTimeframe.value === 'day' ? 0 : 30,
+      interval: selectedTimeframe.value === 'hour' ? 1 : 0, // Show every other label for hours
+      formatter: (value: string) => {
+        if (selectedTimeframe.value === 'hour') {
+          const hour = parseInt(value);
+          return hour % 2 === 0 ? value : ''; // Only show even hours
+        }
+        return value;
+      }
+    }
+  }],
+  yAxis: [{
+    type: 'value',
+    axisLabel: {
+      color: '#ffffff'
+    }
+  }],
+  series: [{
+    name: 'Scans',
+    type: 'bar',
+    barWidth: '60%',
+    data: chartData.value[selectedTimeframe.value].data,
+    itemStyle: {
+      color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+        { offset: 0, color: '#ffffff' },
+        { offset: 1, color: 'rgba(255, 255, 255, 0.8)' }
+      ])
+    },
+    emphasis: {
+      itemStyle: {
+        color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+          { offset: 0, color: '#ffffff' },
+          { offset: 1, color: 'rgba(255, 255, 255, 0.9)' }
+        ])
+      }
+    }
+  }]
 }));
 
 const fetchUserProfileId = async (
@@ -514,7 +564,7 @@ onMounted(async () => {
 }
 
 .chart {
-  height: 200px;
+  height: 300px;
   width: 100%;
 }
 </style>

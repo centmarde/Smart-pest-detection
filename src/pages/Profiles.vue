@@ -36,7 +36,7 @@
                     <v-avatar size="120" class="profile-avatar">
                       <v-img :src="profileImage" cover>
                         <template v-slot:placeholder>
-                          <v-row align="center" justify="center">
+                          <v-row align="center" justify="center" class="fill-height">
                             <v-progress-circular
                               indeterminate
                               color="success"
@@ -250,7 +250,7 @@ const { user, loading, error, refresh } = useUserData();
 // Profile Data
 const username = ref("");
 const email = ref("");
-const profileImage = ref("https://randomuser.me/api/portraits/lego/1.jpg");
+const profileImage = ref("https://touhyblbobrrtoebgkzb.supabase.co/storage/v1/object/public/profiles/avatars/user.png");
 const currentPassword = ref("");
 const newPassword = ref("");
 const errorMessage = ref("");

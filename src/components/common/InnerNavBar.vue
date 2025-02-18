@@ -4,6 +4,17 @@
     :location="$vuetify.display.mobile ? 'left' : 'left'"
     temporary
   >
+    <div class="text-center pt-10">
+      <v-avatar size="100">
+        <img
+          :src="profileImage"
+          alt="Profile Image"
+          v-if="profileImage"
+        />
+        <v-icon v-else size="large">mdi-account</v-icon>
+      </v-avatar>
+    </div>
+
     <v-list>
       <v-list-item style="padding: 8px; margin-top: 2rem">
         <v-btn
@@ -16,16 +27,6 @@
           style="text-transform: none; font-size: 1rem"
         >
           <v-row align="center" no-gutters>
-            <v-col cols="auto">
-              <v-avatar size="30" class="me-2">
-                <img
-                  :src="profileImage"
-                  alt="Profile Image"
-                  v-if="profileImage"
-                />
-                <v-icon v-else>mdi-account</v-icon>
-              </v-avatar>
-            </v-col>
             <p class="text-caption font-weight-bold">{{ email }}</p>
           </v-row>
         </v-btn>
@@ -48,6 +49,25 @@
               }}</v-icon>
             </v-col>
             <v-col> Theme </v-col>
+          </v-row>
+        </v-btn>
+      </v-list-item>
+
+      <v-list-item style="padding: 8px">
+        <v-btn
+          class="justify-start"
+          rounded="0"
+          variant="text"
+          size="large"
+          block
+          to="/scan-history"
+          style="text-transform: none; font-size: 1rem"
+        >
+          <v-row align="center" no-gutters>
+            <v-col cols="auto">
+              <v-icon class="me-3" left style="font-size: 1.5rem">mdi-history</v-icon>
+            </v-col>
+            <v-col> Scan History </v-col>
           </v-row>
         </v-btn>
       </v-list-item>
@@ -94,7 +114,7 @@
         </v-btn>
       </v-list-item>
 
-      <v-list-item style="padding: 8px; margin-top: 20rem">
+      <v-list-item style="padding: 8px; margin-top: 10rem">
         <v-btn
           class="justify-center"
           rounded="0"

@@ -10,7 +10,7 @@
           <v-row>
             <v-col cols="12">
               <v-img
-                :src="scan.imageUrl"
+                :src="scan.pest_scan.image_path"
                 height="300"
                 cover
                 class="rounded-lg"
@@ -21,30 +21,35 @@
           <v-row class="mt-2">
             <v-col cols="12">
               <div class="d-flex align-center mb-4">
-                <h2 class="text-h6 mr-2">{{ scan.diagnosis }}</h2>
+                <h2 class="text-h6 mr-2">{{ scan.pest_scan.name }}</h2>
                 <v-chip
-                  :color="getSeverityColor(scan.severity)"
+                  :color="getSeverityColor(scan.pest_scan.alert_lvl)"
                   size="small"
                   class="text-caption"
                 >
-                  {{ scan.severity }}
+                  {{ scan.pest_scan.alert_lvl }}
                 </v-chip>
               </div>
   
               <div class="details-grid">
                 <div class="detail-item">
-                  <span class="text-subtitle-2 text-medium-emphasis">Scientific Name</span>
-                  <span class="text-body-1">{{ scan.scientificName }}</span>
+                  <span class="text-subtitle-2 text-medium-emphasis">Confidence</span>
+                  <span class="text-body-1">{{ (scan.pest_scan.confidence * 100).toFixed(0) }}%</span>
                 </div>
   
                 <div class="detail-item">
                   <span class="text-subtitle-2 text-medium-emphasis">Date Detected</span>
-                  <span class="text-body-1">{{ formatDate(scan.date) }}</span>
+                  <span class="text-body-1">{{ formatDate(scan.created_at) }}</span>
                 </div>
   
                 <div class="detail-item col-span-2">
-                  <span class="text-subtitle-2 text-medium-emphasis">About</span>
-                  <p class="text-body-1">{{ scan.description }}</p>
+                  <span class="text-subtitle-2 text-medium-emphasis">Analysis</span>
+                  <div class="text-body-1" v-html="scan.pest_scan.comment"></div>
+                </div>
+  
+                <div class="detail-item col-span-2">
+                  <span class="text-subtitle-2 text-medium-emphasis">Recommended Action</span>
+                  <div class="text-body-1" v-html="scan.pest_scan.recommended_action"></div>
                 </div>
               </div>
             </v-col>
@@ -66,19 +71,30 @@
   </template>
   
   <script setup lang="ts">
-  interface ScanDetail {
+  import { computed } from 'vue';
+
+  interface PestScan {
     id: number;
-    diagnosis: string;
-    scientificName: string;
-    date: Date;
-    imageUrl: string;
-    severity: 'High' | 'Medium' | 'Low';
-    description: string;
+    created_at: string;
+    image_path: string;
+    name: string;
+    alert_lvl: string;
+    comment: string;
+    confidence: number;
+    recommended_action: string;
+  }
+  
+  interface ScanHistoryItem {
+    id: number;
+    created_at: string;
+    scan_id: number;
+    user_id: number;
+    pest_scan: PestScan;
   }
   
   interface Props {
     modelValue: boolean;
-    scan?: ScanDetail;
+    scan?: ScanHistoryItem;
   }
   
   const props = defineProps<Props>();
@@ -93,18 +109,18 @@
     isOpen.value = false;
   };
   
-  const formatDate = (date: Date): string => {
+  const formatDate = (date: string): string => {
     return new Intl.DateTimeFormat('en-US', {
       month: 'long',
       day: 'numeric',
       year: 'numeric',
       hour: 'numeric',
       minute: 'numeric',
-    }).format(date);
+    }).format(new Date(date));
   };
   
-  const getSeverityColor = (severity: ScanDetail['severity']): string => {
-    const colors: Record<ScanDetail['severity'], string> = {
+  const getSeverityColor = (severity: string): string => {
+    const colors: Record<string, string> = {
       'High': 'error',
       'Medium': 'warning',
       'Low': 'success'
