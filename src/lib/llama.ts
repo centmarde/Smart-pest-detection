@@ -18,7 +18,7 @@ function formatResponse(content: string): string {
   return content.replace(/\n/g, "<br>");
 }
 
-export function useGroqChat() {
+export function Response() {
   const chatContent = ref("");
 
   async function getPestAdvice(pestName: string): Promise<string> {
@@ -32,7 +32,7 @@ export function useGroqChat() {
         },
         {
           role: "user",
-          content: `Provide detailed advice about how to handle and treat ${pestName} in crops. Include identification, damage patterns, and treatment methods.`
+          content: `Provide detailed advice about how to handle and treat ${pestName} in crops. Include pesticides, and treatment methods.`
         }
       ],
       model: "llama-3.2-1b-preview",

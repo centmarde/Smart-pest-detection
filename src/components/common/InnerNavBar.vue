@@ -17,11 +17,16 @@
         >
           <v-row align="center" no-gutters>
             <v-col cols="auto">
-              <v-icon class="me-3" left style="font-size: 1.5rem"
-                >mdi-account</v-icon
-              >
+              <v-avatar size="30" class="me-2">
+                <img
+                  :src="profileImage"
+                  alt="Profile Image"
+                  v-if="profileImage"
+                />
+                <v-icon v-else>mdi-account</v-icon>
+              </v-avatar>
             </v-col>
-            <v-col> {{ userEmail }} </v-col>
+            <p class="text-caption font-weight-bold">{{ email }}</p>
           </v-row>
         </v-btn>
       </v-list-item>
@@ -143,9 +148,11 @@
 import { computed, ref } from "vue";
 import { useTheme } from "vuetify";
 import { doLogout } from "@/lib/supabase";
-import { useUserInfo } from "@/composables/userInfo";
 import router from "@/router";
+import { supabase } from "@/stores/authUser";
 
+const email = ref("");
+const profileImage = ref("");
 const theme = useTheme();
 const isDarkTheme = computed(() => theme.global.current.value.dark);
 const themeIcon = computed(() =>
@@ -158,18 +165,52 @@ function toggleTheme() {
   localStorage.setItem("theme", newTheme);
 }
 
-const { userEmail } = useUserInfo();
-
 function handleLogoutClick() {
   doLogout();
   router.push("/");
 }
 
+const fetchUserInfo = async () => {
+  try {
+    const {
+      data: { user },
+      error,
+    } = await supabase.auth.getUser();
+
+    if (error) throw error;
+    if (!user) throw new Error("User not authenticated");
+
+    email.value = user.email || "";
+    await fetchUserProfile(user.id);
+  } catch (error) {
+    console.error("Error fetching user:", error);
+  }
+};
+
+const fetchUserProfile = async (userId: string) => {
+  if (!userId) return;
+
+  const { data, error } = await supabase
+    .from("users")
+    .select("profile_image")
+    .eq("user_id", userId)
+    .single();
+
+  if (error) {
+    console.error("Error fetching profile:", error);
+  } else if (data) {
+    profileImage.value = data.profile_image || profileImage.value;
+  }
+};
+
 const drawer = ref(false);
+
+onMounted(async () => {
+  await fetchUserInfo();
+});
 </script>
 
 <style scoped>
-
 .bg-card {
   background: rgba(161, 205, 247, 0.15);
   box-shadow: 0 4px 10px rgba(254, 79, 90, 0.3);

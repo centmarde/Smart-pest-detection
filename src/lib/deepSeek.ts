@@ -18,7 +18,7 @@ function formatResponse(content: string): string {
   return content.replace(/\n/g, "<br><think>");
 }
 
-export function useGroqChat() {
+export function Response() {
   const chatContent = ref("");
 
   async function getRecommendedAction(pestName: string): Promise<string> {

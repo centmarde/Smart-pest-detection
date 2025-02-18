@@ -92,53 +92,41 @@
                   rounded="lg"
                   class="w-100"
                 >
+                  <v-btn
+                    v-for="option in timeframeOptions"
+                    :key="option.value"
+                    :value="option.value"
+                    :prepend-icon="option.icon"
+                    class="flex-grow-1"
+                  >
+                    {{ option.label }}
+                  </v-btn>
+                </v-btn-toggle>
+              </v-card-text>
+            </v-card>
+          </v-col>
+        </v-row>
 
-                  <v-card-text>
-                    <v-btn-toggle
-                      v-model="selectedTimeframe"
-                      mandatory
-                      color="primary"
-                      rounded="lg"
-                      class="w-100"
-                    >
-                      <v-btn
-                        v-for="option in timeframeOptions"
-                        :key="option.value"
-                        :value="option.value"
-                        :prepend-icon="option.icon"
-                        class="flex-grow-1"
-                      >
-                        {{ option.label }}
-                      </v-btn>
-                    </v-btn-toggle>
-                  </v-card-text>
-                </v-card>
-              </v-col>
-            </v-row>
-
-            <!-- Chart Section -->
-            <v-row class="mb-10">
-              <v-col cols="12">
-                <v-card class="rounded-lg dashboard-card" elevation="0">
-                  <v-card-title class="px-4 pt-4">
-                    Scan Activity
-                    <v-spacer></v-spacer>
-                    <span class="text-caption" style="color: #D3E5F1;">
-                      Total scans: {{ totalScans }}
-                    </span>
-                  </v-card-title>
-                  <v-card-text>
-                    <v-chart class="chart" :option="chartOption" autoresize />
-                  </v-card-text>
-                </v-card>
-              </v-col>
-            </v-row>
-
-          </v-container>
-
+        <!-- Chart Section -->
+        <v-row class="mb-10">
+          <v-col cols="12">
+            <v-card class="rounded-lg dashboard-card" elevation="0">
+              <v-card-title class="px-4 pt-4">
+                Scan Activity
+                <v-spacer></v-spacer>
+                <span class="text-caption" style="color: #d3e5f1">
+                  Total scans: {{ totalScans }}
+                </span>
+              </v-card-title>
+              <v-card-text>
+                <v-chart class="chart" :option="chartOption" autoresize />
+              </v-card-text>
+            </v-card>
+          </v-col>
+        </v-row>
+      </v-container>
     </template>
   </LayoutWrapper>
-  
 </template>
 
 <script setup lang="ts">
@@ -147,6 +135,7 @@ import { use } from "echarts/core";
 import { CanvasRenderer } from "echarts/renderers";
 import { BarChart } from "echarts/charts";
 import { useScanResultStore } from "@/stores/scanResultStore";
+import { SupabaseClient } from "@supabase/supabase-js";
 import {
   GridComponent,
   TooltipComponent,
@@ -174,14 +163,16 @@ import { supabase } from "@/stores/authUser";
 
 const fetchUserInfo = async () => {
   try {
-    const { data, error } = await supabase.auth.getUser();
+    const { data: userData, error } = await supabase.auth.getUser();
     if (error) throw error;
-    if (!data?.user) throw new Error("User not authenticated");
+    if (!userData?.user) throw new Error("User not authenticated");
 
-    email.value = data.user.email || "";
-    await fetchUserProfile(data.user.id);
-    await loadStats(data.user.id);
-    await loadChartData(data.user.id);
+    const authUserId = userData.user.id;
+    email.value = userData.user.email || "";
+
+    await fetchUserProfile(authUserId);
+    await loadStats(authUserId, supabase);
+    await loadChartData(authUserId, supabase);
   } catch (error) {
     console.error("Error fetching user:", error);
   }
@@ -204,8 +195,6 @@ const fetchUserProfile = async (userId: string) => {
   }
 };
 
-
-
 interface TimeframeOption {
   label: string;
   value: string;
@@ -218,6 +207,12 @@ interface StatCard {
   icon: string;
   iconColor: string;
   color: string;
+}
+
+interface ScanStats {
+  scansTodayCount: number;
+  successRate: number;
+  totalScans: number;
 }
 
 const scanResultStore = useScanResultStore();
@@ -249,8 +244,12 @@ const stats = ref<StatCard[]>([
   },
 ]);
 
-const loadStats = async (userId: string) => {
-  const statsData = await fetchUserScanStats(userId);
+const loadStats = async (
+  authUserId: string,
+  supabaseClient: SupabaseClient
+): Promise<void> => {
+  const statsData = await fetchUserScanStats(authUserId, supabaseClient);
+
   if (statsData) {
     stats.value = [
       {
@@ -261,8 +260,8 @@ const loadStats = async (userId: string) => {
         color: "bg-primary-lighten-4",
       },
       {
-        title: "Recent Scan Success Rate",
-        value: `${(statsData.successRate * 100).toFixed(2)}%`,
+        title: "Success Rate",
+        value: `${(statsData.successRate * 100).toFixed(1)}%`,
         icon: mdiPercent,
         iconColor: "success",
         color: "bg-success-lighten-4",
@@ -307,76 +306,142 @@ const chartOption = computed(() => ({
   ],
 }));
 
-const fetchUserScanStats = async (userId: string) => {
-  if (!userId) return;
-
-  const today = new Date().toISOString().split("T")[0];
-
+const fetchUserProfileId = async (
+  authUserId: string,
+  supabaseClient: SupabaseClient
+): Promise<number | null> => {
   try {
-    const { data: todayScans, error: todayError } = await supabase
-      .from("pest_scans")
+    const { data, error } = await supabaseClient
+      .from("users")
       .select("id")
-      .eq("user_id", userId as string) 
-      .gte("created_at", `${today}T00:00:00`)
-      .lte("created_at", `${today}T23:59:59`);
-
-    if (todayError) throw todayError;
-
-    const scansTodayCount = todayScans ? todayScans.length : 0;
-
-    const { data: recentScan, error: recentError } = await supabase
-      .from("pest_scans")
-      .select("confidence")
-      .eq("user_id", userId as string) 
-      .order("created_at", { ascending: false })
-      .limit(1)
+      .eq("user_id", authUserId)
       .single();
 
-    if (recentError) throw recentError;
-
-    const successRate = recentScan?.confidence ?? 0;
-    return { scansTodayCount, successRate };
+    if (error) throw error;
+    return data?.id || null;
   } catch (error) {
-    console.error("Error fetching scan stats:", error);
-    return { scansTodayCount: 0, successRate: 0 };
+    console.error("Error fetching user profile ID:", error);
+    return null;
   }
 };
 
-const loadChartData = async (userId: string) => {
+const fetchUserScanStats = async (
+  authUserId: string,
+  supabaseClient: SupabaseClient
+): Promise<ScanStats | null> => {
   try {
-    const { data, error } = await supabase
+    const profileId = await fetchUserProfileId(authUserId, supabaseClient);
+    if (!profileId) return null;
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    // Fetch today's scans
+    const { data: todayScans, error: todayError } = await supabaseClient
+      .from("scan_history")
+      .select("id")
+      .eq("user_id", profileId)
+      .gte("created_at", today.toISOString())
+      .lte("created_at", new Date().toISOString());
+
+    if (todayError) throw todayError;
+
+    // Fetch recent scans with confidence
+    const { data: statsData, error: statsError } = await supabaseClient
       .from("pest_scans")
+      .select("confidence")
+      .order("created_at", { ascending: false })
+      .limit(10);
+
+    if (statsError) throw statsError;
+
+    const scansTodayCount = todayScans?.length ?? 0;
+    const successRate =
+      statsData?.reduce((acc, scan) => acc + (scan.confidence || 0), 0) /
+      (statsData?.length || 1);
+    const totalScans = statsData?.length ?? 0;
+
+    return {
+      scansTodayCount,
+      successRate,
+      totalScans,
+    };
+  } catch (error) {
+    console.error("Error fetching scan stats:", error);
+    return null;
+  }
+};
+
+const loadChartData = async (
+  authUserId: string,
+  supabaseClient: SupabaseClient
+): Promise<void> => {
+  try {
+    const profileId = await fetchUserProfileId(authUserId, supabaseClient);
+    if (!profileId) return;
+
+    const endDate = new Date();
+    const startDate = new Date();
+    startDate.setMonth(startDate.getMonth() - 12);
+
+    const { data, error } = await supabaseClient
+      .from("scan_history")
       .select("created_at")
-      .eq("user_id", userId as string) // Ensure it's treated as a UUID
+      .eq("user_id", profileId)
+      .gte("created_at", startDate.toISOString())
+      .lte("created_at", endDate.toISOString())
       .order("created_at", { ascending: true });
 
     if (error) throw error;
 
+    // Initialize data arrays
     const hourlyData = new Array(24).fill(0);
     const dailyData = new Array(7).fill(0);
     const monthlyData = new Array(12).fill(0);
 
-    data.forEach((scan) => {
+    // Process scan data
+    data?.forEach((scan) => {
       const date = new Date(scan.created_at);
-      const hour = date.getHours();
-      const day = date.getDay();
-      const month = date.getMonth();
-
-      hourlyData[hour]++;
-      dailyData[day]++;
-      monthlyData[month]++;
+      hourlyData[date.getHours()]++;
+      dailyData[date.getDay()]++;
+      monthlyData[date.getMonth()]++;
     });
 
+    // Update chart data
     chartData.value = {
-      hour: { labels: [...Array(24).keys()].map((h) => `${h}:00`), data: hourlyData },
-      day: { labels: ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"], data: dailyData },
-      month: { labels: ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"], data: monthlyData },
+      hour: {
+        labels: Array.from(
+          { length: 24 },
+          (_, i) => `${i.toString().padStart(2, "0")}:00`
+        ),
+        data: hourlyData,
+      },
+      day: {
+        labels: ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"],
+        data: dailyData,
+      },
+      month: {
+        labels: [
+          "Jan",
+          "Feb",
+          "Mar",
+          "Apr",
+          "May",
+          "Jun",
+          "Jul",
+          "Aug",
+          "Sep",
+          "Oct",
+          "Nov",
+          "Dec",
+        ],
+        data: monthlyData,
+      },
     };
   } catch (error) {
     console.error("Error loading chart data:", error);
   }
 };
-
 
 onMounted(async () => {
   await fetchUserInfo();
@@ -452,5 +517,4 @@ onMounted(async () => {
   height: 200px;
   width: 100%;
 }
-
 </style>
